@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RPG Battle Game</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: #121212;
+      color: #fff;
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 10px;
+    }
+
+    /* ゲームコンテナ：スマホ画面最適化 */
+    .game-container {
+      width: 100%;
+      max-width: 480px;
+      background: #222;
+      border: 3px solid #555;
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+    }
+
+    /* バトルフィールド */
+    .battle-field {
+      position: relative;
+      background: linear-gradient(to bottom, #1a1a2e, #16213e, #0f3460);
+      height: 320px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 15px;
+    }
+
+    /* キャラクターステータスエリア */
+    .status-card {
+      background: rgba(0, 0, 0, 0.6);
+      border: 1px solid #777;
+      border-radius: 8px;
+      padding: 8px 12px;
+      width: 160px;
+      z-index: 2;
+    }
+
+    .status-card.monster-status {
+      align-self: flex-start;
+    }
+
+    .status-card.hero-status {
+      align-self: flex-end;
+    }
+
+    .name {
+      font-size: 14px;
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+
+    .hp-bar-bg {
+      background: #444;
+      height: 10px;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+
+    .hp-bar-fill {
+      background: #4eef6d;
+      height: 100%;
+      width: 100%;
+      transition: width 0.3s ease;
+    }
+
+    .hp-text {
+      font-size: 11px;
+      text-align: right;
+      margin-top: 2px;
+    }
+
+    /* キャラクターイラスト表示エリア */
+    .characters-stage {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 30px;
+    }
+
+    .character {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transition: transform 0.2s, opacity 0.5s;
+    }
+
+    /* モンスター・勇者イラスト (SVG) */
+    .monster-img {
+      width: 110px;
+      height: 110px;
+      margin-top: -30px;
+    }
+
+    .hero-img {
+      width: 110px;
+      height: 110px;
+      margin-top: 60px;
+    }
+
+    /* ドロップアイテム表示エリア（中央） */
+    .loot-stage {
+      position: absolute;
+      top: 45%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 5;
+    }
+
+    .loot-item {
+      width: 120px;
+      height: 120px;
+      display: none;
+      filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.8));
+      animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    }
+
+    /* タイミングアクションゲージ */
+    .timing-container {
+      background: #111;
+      border-top: 1px solid #444;
+      padding: 10px 15px;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .timing-label {
+      font-size: 13px;
+      color: #ffcc00;
+      margin-bottom: 6px;
+      font-weight: bold;
+    }
+
+    .gauge-bg {
+      position: relative;
+      width: 100%;
+      height: 28px;
+      background: #333;
+      border: 2px solid #666;
+      border-radius: 14px;
+      overflow: hidden;
+    }
+
+    /* 動的に幅と位置が変わる成功ゾーン */
+    .success-zone {
+      position: absolute;
+      top: 0;
+      height: 100%;
+      background: rgba(78, 239, 109, 0.7);
+      border-left: 2px solid #fff;
+      border-right: 2px solid #fff;
+      transition: width 0.3s, left 0.3s;
+    }
+
+    .cursor {
+      position: absolute;
+      top: 0;
+      left: 0%;
+      width: 8px;
+      height: 100%;
+      background: #ff3333;
+      box-shadow: 0 0 8px #ff3333;
+      border-radius: 2px;
+    }
+
+    /* アニメーション */
+    .attack-hero { animation: heroAttack 0.4s ease; }
+    .attack-monster { animation: monsterAttack 0.4s ease; }
+    .damage { animation: takeDamage 0.4s ease; }
+    .vanish { opacity: 0; }
+
+    @keyframes heroAttack {
+      0% { transform: translate(0, 0); }
+      50% { transform: translate(-30px, -30px); }
+      100% { transform: translate(0, 0); }
+    }
+
+    @keyframes monsterAttack {
+      0% { transform: translate(0, 0); }
+      50% { transform: translate(30px, 30px); }
+      100% { transform: translate(0, 0); }
+    }
+
+    @keyframes takeDamage {
+      0% { opacity: 1; }
+      25% { opacity: 0.2; }
+      50% { opacity: 1; }
+      75% { opacity: 0.2; }
+      100% { opacity: 1; }
+    }
+
+    @keyframes popIn {
+      0% { transform: scale(0) rotate(-10deg); opacity: 0; }
+      70% { transform: scale(1.2) rotate(5deg); opacity: 1; }
+      100% { transform: scale(1) rotate(0deg); opacity: 1; }
+    }
+
+    /* メッセージログエリア */
+    .log-box {
+      background: #111;
+      border-top: 2px solid #444;
+      border-bottom: 2px solid #444;
+      padding: 12px;
+      height: 85px;
+      font-size: 14px;
+      line-height: 1.4;
+      overflow-y: auto;
+    }
+
+    /* コマンドUIエリア (スマホタッチ操作対応) */
+    .command-panel {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 12px;
+      background: #2a2a2a;
+    }
+
+    .btn {
+      background: linear-gradient(to bottom, #444, #222);
+      border: 2px solid #666;
+      border-radius: 8px;
+      color: #fff;
+      padding: 14px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: background 0.2s, transform 0.1s;
+    }
+
+    .btn:active {
+      transform: scale(0.96);
+      background: #555;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-attack { border-color: #ff5555; color: #ffaaaa; }
+    .btn-heal { border-color: #55ff55; color: #aaffaa; }
+    .btn-timing {
+      grid-column: span 2;
+      border-color: #ffcc00;
+      color: #ffeeaa;
+      background: linear-gradient(to bottom, #886600, #443300);
+      display: none;
+      padding: 16px;
+      font-size: 18px;
+    }
+    .btn-next {
+      grid-column: span 2;
+      border-color: #00ccff;
+      color: #aaeedd;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<div class="game-container">
+  <!-- バトル画面 -->
+  <div class="battle-field">
+    <!-- モンスター ステータス -->
+    <div class="status-card monster-status">
+      <div id="monster-name" class="name">スライム</div>
+      <div class="hp-bar-bg">
+        <div id="monster-hp-bar" class="hp-bar-fill"></div>
+      </div>
+      <div class="hp-text"><span id="monster-hp">40</span> / <span id="monster-max-hp">40</span></div>
+    </div>
+
+    <!-- イラスト配置ステージ -->
+    <div class="characters-stage">
+      <!-- 女の子勇者イラスト (SVG) -->
+      <div id="hero-character" class="character">
+        <svg class="hero-img" viewBox="0 0 100 100">
+          <path d="M 25 35 Q 20 65 30 75 Q 50 80 70 75 Q 80 65 75 35 Z" fill="#ff9900" />
+          <path d="M 35 60 L 65 60 L 70 95 L 30 95 Z" fill="#e6e6e6" />
+          <path d="M 40 60 L 60 60 L 65 85 L 35 85 Z" fill="#3388ff" />
+          <circle cx="50" cy="42" r="18" fill="#ffe0bd" />
+          <circle cx="43" cy="40" r="3" fill="#222" />
+          <circle cx="57" cy="40" r="3" fill="#222" />
+          <circle cx="44" cy="39" r="1" fill="#fff" />
+          <circle cx="58" cy="39" r="1" fill="#fff" />
+          <ellipse cx="40" cy="46" rx="3" ry="1.5" fill="#ff9999" />
+          <ellipse cx="60" cy="46" rx="3" ry="1.5" fill="#ff9999" />
+          <path d="M 47 48 Q 50 52 53 48" stroke="#ff6666" stroke-width="1.5" fill="none" />
+          <path d="M 32 35 Q 40 42 50 32 Q 60 42 68 35 Q 50 20 32 35 Z" fill="#ffb300" />
+          <path d="M 38 26 L 50 30 L 62 26 L 50 22 Z" fill="#ff3366" />
+          <path d="M 70 50 L 85 35 L 88 38 L 73 53 Z" fill="#cccccc" />
+          <path d="M 68 52 L 74 46" stroke="#999999" stroke-width="3" />
+        </svg>
+      </div>
+
+      <!-- モンスターイラスト (SVG) -->
+      <div id="monster-character" class="character"></div>
+    </div>
+
+    <!-- ドロップアイテム表示エリア -->
+    <div class="loot-stage">
+      <!-- 宝石イラスト -->
+      <svg id="gem-loot" class="loot-item" viewBox="0 0 100 100">
+        <polygon points="30,30 70,30 85,50 50,85 15,50" fill="#00ffff" stroke="#ffffff" stroke-width="2" />
+        <polygon points="30,30 50,50 15,50" fill="#80ffff" />
+        <polygon points="70,30 50,50 85,50" fill="#00c8c8" />
+        <polygon points="30,30 50,30 50,50" fill="#e0ffff" />
+        <polygon points="70,30 50,30 50,50" fill="#00e6e6" />
+        <polygon points="50,50 85,50 50,85" fill="#009999" />
+        <polygon points="50,50 15,50 50,85" fill="#33ffff" />
+      </svg>
+
+      <!-- 宝物（宝箱と金銀財宝）イラスト -->
+      <svg id="treasure-loot" class="loot-item" viewBox="0 0 100 100">
+        <rect x="20" y="50" width="60" height="35" rx="5" fill="#8b4513" stroke="#000" stroke-width="2" />
+        <rect x="20" y="40" width="60" height="15" rx="3" fill="#a0522d" stroke="#000" stroke-width="2" />
+        <rect x="18" y="52" width="64" height="6" fill="#ffd700" />
+        <rect x="44" y="48" width="12" height="15" fill="#ffd700" stroke="#000" stroke-width="1" />
+        <circle cx="50" cy="53" r="2" fill="#000" />
+        <circle cx="30" cy="38" r="6" fill="#ffd700" stroke="#cc9900" stroke-width="1" />
+        <circle cx="40" cy="35" r="7" fill="#ffe066" stroke="#cc9900" stroke-width="1" />
+        <circle cx="52" cy="36" r="6" fill="#ffd700" stroke="#cc9900" stroke-width="1" />
+        <circle cx="65" cy="37" r="7" fill="#ffe066" stroke="#cc9900" stroke-width="1" />
+        <circle cx="35" cy="32" r="5" fill="#ffd700" stroke="#cc9900" stroke-width="1" />
+        <circle cx="58" cy="30" r="6" fill="#ffd700" stroke="#cc9900" stroke-width="1" />
+        <polygon points="25,25 28,20 31,25 28,30" fill="#ff0055" />
+        <polygon points="70,22 73,17 76,22 73,27" fill="#00ffff" />
+        <polygon points="48,18 52,12 56,18 52,24" fill="#00ff55" />
+      </svg>
+    </div>
+
+    <!-- 勇者 ステータス -->
+    <div class="status-card hero-status">
+      <div class="name">勇者ちゃん</div>
+      <div class="hp-bar-bg">
+        <div id="hero-hp-bar" class="hp-bar-fill"></div>
+      </div>
+      <div class="hp-text"><span id="hero-hp">80</span> / 80</div>
+    </div>
+  </div>
+
+  <!-- タイミングアクションゲージ -->
+  <div id="timing-container" class="timing-container">
+    <div class="timing-label">みどりのエリアでタップ！</div>
+    <div class="gauge-bg">
+      <div id="success-zone" class="success-zone"></div>
+      <div id="cursor" class="cursor"></div>
+    </div>
+  </div>
+
+  <!-- テキストログ -->
+  <div id="log" class="log-box">
+    モンスターが あらわれた！
+  </div>
+
+  <!-- コマンドボタン -->
+  <div class="command-panel">
+    <button id="btn-attack" class="btn btn-attack" onclick="startTimingAction()">こうげき</button>
+    <button id="btn-heal" class="btn btn-heal" onclick="playerAction('heal')">かいふく</button>
+    <button id="btn-stop" class="btn btn-timing" onclick="stopTimingAction()">ストップ！</button>
+    <button id="btn-next" class="btn btn-next" onclick="nextStage()">つぎのステージへ</button>
+  </div>
+</div>
+
+<script>
+  // 小学1年生向けにスピード・枠幅（成功エリア）をステージごとに調整
+  const monsters = [
+    {
+      name: 'スライム',
+      hp: 30,
+      maxHp: 30,
+      attack: 6,
+      speed: 0.8,       // かなりゆっくり
+      zoneWidth: 50,     // ゲージの半分(50%)が成功エリア
+      zoneLeft: 25,      // 中央(25%〜75%)
+      lootType: 'gem',
+      svg: `<svg class="monster-img" viewBox="0 0 100 100">
+              <path d="M 20 70 Q 10 40 35 30 Q 50 15 65 30 Q 90 40 80 70 Q 50 85 20 70 Z" fill="#3399ff" />
+              <circle cx="38" cy="45" r="5" fill="#fff" />
+              <circle cx="62" cy="45" r="5" fill="#fff" />
+              <circle cx="40" cy="45" r="2.5" fill="#000" />
+              <circle cx="64" cy="45" r="2.5" fill="#000" />
+              <ellipse cx="50" cy="58" rx="8" ry="4" fill="#1a66cc" />
+            </svg>`
+    },
+    {
+      name: 'がいこつけんし',
+      hp: 50,
+      maxHp: 50,
+      attack: 10,
+      speed: 1.1,       // ややゆっくり
+      zoneWidth: 35,     // やや広め(35%)
+      zoneLeft: 32.5,    // 中央付近(32.5%〜67.5%)
+      lootType: 'gem',
+      svg: `<svg class="monster-img" viewBox="0 0 100 100">
+              <circle cx="50" cy="35" r="18" fill="#e0e0e0" />
+              <circle cx="43" cy="33" r="4" fill="#111" />
+              <circle cx="57" cy="33" r="4" fill="#111" />
+              <polygon points="50,38 47,43 53,43" fill="#111" />
+              <path d="M 42 48 L 58 48 M 45 46 L 45 50 M 50 46 L 50 50 M 55 46 L 55 50" stroke="#111" stroke-width="1.5" />
+              <path d="M 50 53 L 50 80 M 40 60 L 60 60 M 42 68 L 58 68" stroke="#e0e0e0" stroke-width="4" stroke-linecap="round" />
+              <path d="M 30 75 L 15 45 L 18 43 L 33 73 Z" fill="#cccccc" />
+              <path d="M 27 77 L 35 69" stroke="#999999" stroke-width="3" />
+              <ellipse cx="68" cy="65" rx="12" ry="16" fill="#666" stroke="#888" stroke-width="2" />
+            </svg>`
+    },
+    {
+      name: 'ドラゴン',
+      hp: 80,
+      maxHp: 80,
+      attack: 14,
+      speed: 1.4,       // 標準スピード（小1でも十分狙える）
+      zoneWidth: 25,     // 標準的な幅(25%)
+      zoneLeft: 37.5,    // 中央(37.5%〜62.5%)
+      lootType: 'treasure',
+      svg: `<svg class="monster-img" viewBox="0 0 100 100">
+              <path d="M 30 40 Q 10 20 5 45 Q 20 50 35 55 Z" fill="#880022" />
+              <path d="M 70 40 Q 90 20 95 45 Q 80 50 65 55 Z" fill="#880022" />
+              <ellipse cx="50" cy="60" rx="25" ry="30" fill="#dd2244" />
+              <ellipse cx="50" cy="65" rx="16" ry="20" fill="#ffcc44" />
+              <circle cx="50" cy="35" r="20" fill="#dd2244" />
+              <path d="M 38 22 Q 30 10 25 12 Q 32 22 36 26 Z" fill="#ffcc44" />
+              <path d="M 62 22 Q 70 10 75 12 Q 68 22 64 26 Z" fill="#ffcc44" />
+              <polygon points="40,30 46,34 40,36" fill="#ffff00" />
+              <polygon points="60,30 54,34 60,36" fill="#ffff00" />
+              <circle cx="43" cy="33" r="1.5" fill="#000" />
+              <circle cx="57" cy="33" r="1.5" fill="#000" />
+              <path d="M 42 42 Q 50 46 58 42" stroke="#000" stroke-width="1.5" fill="none" />
+              <polygon points="44,42 46,46 48,42" fill="#fff" />
+              <polygon points="52,42 54,46 56,42" fill="#fff" />
+            </svg>`
+    }
+  ];
+
+  let currentStage = 0;
+  let heroHp = 80;
+  const maxHeroHp = 80;
+  let monsterHp = 0;
+  let isBusy = false;
+
+  // タイミングゲージ制御用変数
+  let cursorPosition = 0;
+  let cursorSpeed = 1;
+  let cursorDirection = 1;
+  let timingAnimationId = null;
+
+  const logEl = document.getElementById('log');
+  const heroHpEl = document.getElementById('hero-hp');
+  const heroHpBar = document.getElementById('hero-hp-bar');
+  const monsterNameEl = document.getElementById('monster-name');
+  const monsterHpEl = document.getElementById('monster-hp');
+  const monsterMaxHpEl = document.getElementById('monster-max-hp');
+  const monsterHpBar = document.getElementById('monster-hp-bar');
+  
+  const heroChar = document.getElementById('hero-character');
+  const monsterChar = document.getElementById('monster-character');
+  const gemLoot = document.getElementById('gem-loot');
+  const treasureLoot = document.getElementById('treasure-loot');
+
+  const timingContainer = document.getElementById('timing-container');
+  const successZone = document.getElementById('success-zone');
+  const cursor = document.getElementById('cursor');
+
+  const btnAttack = document.getElementById('btn-attack');
+  const btnHeal = document.getElementById('btn-heal');
+  const btnStop = document.getElementById('btn-stop');
+  const btnNext = document.getElementById('btn-next');
+
+  function initStage(stageIdx) {
+    const m = monsters[stageIdx];
+    monsterHp = m.hp;
+    monsterNameEl.textContent = m.name;
+    monsterMaxHpEl.textContent = m.maxHp;
+    monsterChar.innerHTML = m.svg;
+    monsterChar.classList.remove('vanish');
+    
+    // ステージに応じたゲージの設定（スピードと成功ゾーンの幅）
+    cursorSpeed = m.speed;
+    successZone.style.width = m.zoneWidth + '%';
+    successZone.style.left = m.zoneLeft + '%';
+
+    gemLoot.style.display = 'none';
+    treasureLoot.style.display = 'none';
+    timingContainer.style.display = 'none';
+
+    btnAttack.style.display = 'block';
+    btnHeal.style.display = 'block';
+    btnStop.style.display = 'none';
+    btnNext.style.display = 'none';
+
+    updateHp();
+    setMessage(`${m.name} が あらわれた！`);
+    isBusy = false;
+  }
+
+  function setMessage(msg) {
+    logEl.innerHTML = msg;
+  }
+
+  function updateHp() {
+    heroHpEl.textContent = heroHp;
+    heroHpBar.style.width = Math.max(0, (heroHp / maxHeroHp) * 100) + '%';
+
+    const currentMonster = monsters[currentStage];
+    monsterHpEl.textContent = monsterHp;
+    monsterHpBar.style.width = Math.max(0, (monsterHp / currentMonster.maxHp) * 100) + '%';
+  }
+
+  // タイミングアクション開始
+  function startTimingAction() {
+    if (isBusy || heroHp <= 0 || monsterHp <= 0) return;
+    isBusy = true;
+
+    btnAttack.style.display = 'none';
+    btnHeal.style.display = 'none';
+    btnStop.style.display = 'block';
+    timingContainer.style.display = 'flex';
+
+    cursorPosition = 0;
+    cursorDirection = 1;
+    moveCursor();
+  }
+
+  function moveCursor() {
+    cursorPosition += cursorSpeed * cursorDirection;
+    if (cursorPosition >= 96) {
+      cursorPosition = 96;
+      cursorDirection = -1;
+    } else if (cursorPosition <= 0) {
+      cursorPosition = 0;
+      cursorDirection = 1;
+    }
+    cursor.style.left = cursorPosition + '%';
+    timingAnimationId = requestAnimationFrame(moveCursor);
+  }
+
+  // タイミングアクションのストップ（判定）
+  function stopTimingAction() {
+    cancelAnimationFrame(timingAnimationId);
+    
+    const m = monsters[currentStage];
+    const minZone = m.zoneLeft - 2;
+    const maxZone = m.zoneLeft + m.zoneWidth;
+    
+    // 成功ゾーン内か判定
+    const isSuccess = (cursorPosition >= minZone && cursorPosition <= maxZone);
+    
+    btnStop.style.display = 'none';
+    timingContainer.style.display = 'none';
+
+    playerAction('attack', isSuccess);
+  }
+
+  async function playerAction(type, isSuccess = false) {
+    if (type === 'attack') {
+      heroChar.classList.add('attack-hero');
+      setMessage('勇者ちゃんの こうげき！');
+      await sleep(300);
+
+      if (isSuccess) {
+        // 攻撃成功
+        monsterChar.classList.add('damage');
+        const damage = Math.floor(Math.random() * 8) + 20;
+        monsterHp = Math.max(0, monsterHp - damage);
+        updateHp();
+        setMessage(`<b>タイミングばっちり！</b><br>${monsters[currentStage].name} に ${damage} のだいだめーじ！`);
+        await sleep(500);
+        monsterChar.classList.remove('damage');
+      } else {
+        // 攻撃失敗
+        setMessage(`タイミングが おしかった！<br>こうげきは しっぱい...`);
+        await sleep(500);
+      }
+      heroChar.classList.remove('attack-hero');
+
+    } else if (type === 'heal') {
+      isBusy = true;
+      const heal = Math.floor(Math.random() * 10) + 25;
+      heroHp = Math.min(maxHeroHp, heroHp + heal);
+      updateHp();
+      setMessage(`勇者ちゃんは じゅもんを となえた！<br>HPが ${heal} かいふくした！`);
+      await sleep(800);
+    }
+
+    // モンスター撃破判定
+    if (monsterHp <= 0) {
+      await sleep(400);
+      monsterChar.classList.add('vanish');
+      
+      const currentMonster = monsters[currentStage];
+      
+      if (currentMonster.lootType === 'gem') {
+        setMessage(`${currentMonster.name} を たおした！<br>きれいな <b style="color:#00ffff;">ほうせき</b> を てにいれた！`);
+        gemLoot.style.display = 'block';
+      } else if (currentMonster.lootType === 'treasure') {
+        setMessage(`ドラゴン を たおした！<br>たくさんの <b style="color:#ffd700;">たからもの</b> を てにいれた！`);
+        treasureLoot.style.display = 'block';
+      }
+
+      await sleep(1000);
+
+      if (currentStage < monsters.length - 1) {
+        btnAttack.style.display = 'none';
+        btnHeal.style.display = 'none';
+        btnNext.style.display = 'block';
+      } else {
+        setMessage(`ドラゴン を たおした！<br>たくさんの <b style="color:#ffd700;">たからもの</b> を てにいれた！<br><span style="color:#ffcc00;">★ GAME CLEAR ★</span>`);
+      }
+      return;
+    }
+
+    // モンスターのターン
+    await sleep(600);
+    monsterChar.classList.add('attack-monster');
+    setMessage(`${monsters[currentStage].name} の こうげき！`);
+    await sleep(300);
+
+    heroChar.classList.add('damage');
+    const monsterDamage = Math.floor(Math.random() * 5) + monsters[currentStage].attack;
+    heroHp = Math.max(0, heroHp - monsterDamage);
+    updateHp();
+    setMessage(`勇者ちゃんは ${monsterDamage} のダメージをうけた！`);
+
+    await sleep(400);
+    monsterChar.classList.remove('attack-monster');
+    heroChar.classList.remove('damage');
+
+    // 敗北判定
+    if (heroHp <= 0) {
+      await sleep(400);
+      setMessage('勇者ちゃんは たおれてしまった...<br>GAME OVER');
+    } else {
+      btnAttack.style.display = 'block';
+      btnHeal.style.display = 'block';
+      isBusy = false;
+    }
+  }
+
+  function nextStage() {
+    currentStage++;
+    initStage(currentStage);
+  }
+
+  function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // 初期化開始
+  initStage(0);
+</script>
+
+</body>
+</html>
